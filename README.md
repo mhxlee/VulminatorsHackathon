@@ -31,6 +31,7 @@ Endpoints (initial scaffold):
 Scanners wired today:
 - Semgrep rulesets (`fast/balanced/exhaustive`) for source-level findings.
 - `npm audit --package-lock-only` to surface dependency CVEs from any `package-lock.json`.
+- Critical/high npm advisories are auto-upgraded via `npm install <pkg>@latest` before the PR opens.
 - With `VULMINATOR_GITHUB_TOKEN` (or a token in the request body), each run drops `reports/VulminatorReport.md`, pushes it to a fork branch (`vulminator/<timestamp>`), and opens a PR automatically.
 
 ## Frontend (Vite + React)

@@ -7,6 +7,7 @@ from typing import List, Optional
 from .. import schemas
 from ..config import get_settings
 from .dependency_scan import DependencyScannerError, run_dependency_audits
+from .dependency_upgrader import DependencyUpgradeError, apply_dependency_upgrades
 from .pr_publisher import publish_report_pr
 from .repo_workspace import RepoWorkspace
 from .reporting import generate_markdown_report
@@ -53,13 +54,47 @@ async def run_analysis_pipeline(
         messages.append("Semgrep failed")
 
     try:
-        dependency_findings = await asyncio.to_thread(
+        dependency_result = await asyncio.to_thread(
             run_dependency_audits, str(repo_dir)
         )
-        findings.extend(dependency_findings)
+        findings.extend(dependency_result.findings)
         messages.append(
-            f"Dependency audit returned {len(dependency_findings)} finding(s)"
+            f"Dependency audit returned {len(dependency_result.findings)} finding(s)"
         )
+
+        if dependency_result.upgrade_plan:
+            try:
+                upgrade_actions = await asyncio.to_thread(
+                    apply_dependency_upgrades,
+                    repo_dir,
+                    dependency_result.upgrade_plan,
+                )
+                for action in upgrade_actions:
+                    findings.append(
+                        {
+                            "title": f"Upgraded {action.package}",
+                            "severity": "info",
+                            "file_path": str(action.lockfile),
+                            "summary": (
+                                "Auto-installed latest version via npm install."
+                                if action.success
+                                else f"Upgrade failed: {action.message}"
+                            ),
+                        }
+                    )
+                messages.append(
+                    f"Upgraded {len(upgrade_actions)} dependency package(s) automatically"
+                )
+            except DependencyUpgradeError as exc:
+                findings.append(
+                    {
+                        "title": "Dependency upgrade",
+                        "severity": "error",
+                        "summary": str(exc),
+                        "file_path": None,
+                    }
+                )
+                messages.append("Dependency upgrade step failed")
     except DependencyScannerError as exc:
         findings.append(
             {

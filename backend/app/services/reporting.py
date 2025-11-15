@@ -1,4 +1,5 @@
 import os
+import logging
 from textwrap import dedent
 from typing import List
 
@@ -6,6 +7,8 @@ from openai import AsyncOpenAI, OpenAIError
 
 from ..config import get_settings
 from ..schemas import FindingSummary
+
+logger = logging.getLogger(__name__)
 
 
 def _fallback_report(findings: List[FindingSummary]) -> str:
@@ -84,5 +87,6 @@ async def generate_markdown_report(findings: List[FindingSummary]) -> str:
 
     try:
         return await _call_openai(prompt, settings.openai_model)
-    except OpenAIError:
+    except OpenAIError as exc:
+        logger.exception("OpenAI reporting failed: %s", exc)
         return _fallback_report(findings)

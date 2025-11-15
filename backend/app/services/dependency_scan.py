@@ -3,12 +3,9 @@
 import json
 import shutil
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
-
-
-class DependencyScannerError(RuntimeError):
-    pass
+from typing import Dict, List, Set
 
 
 def _ensure_npm() -> None:
@@ -18,9 +15,24 @@ def _ensure_npm() -> None:
         )
 
 
-def _parse_vulnerabilities(payload: dict, lockfile_path: Path) -> List[dict]:
+UPGRADE_SEVERITIES = {"high", "critical"}
+
+
+@dataclass
+class DependencyScanResult:
+    findings: List[dict] = field(default_factory=list)
+    lockfiles: List[Path] = field(default_factory=list)
+    upgrade_plan: Dict[Path, Set[str]] = field(default_factory=dict)
+
+
+class DependencyScannerError(RuntimeError):
+    pass
+
+
+def _parse_vulnerabilities(payload: dict, lockfile_path: Path):
     vulnerabilities = payload.get("vulnerabilities", {})
     findings: List[dict] = []
+    upgrade_packages: Set[str] = set()
 
     for package_name, vuln in vulnerabilities.items():
         via = vuln.get("via") or []
@@ -52,25 +64,30 @@ def _parse_vulnerabilities(payload: dict, lockfile_path: Path) -> List[dict]:
             }
         )
 
-    return findings
+        if severity in UPGRADE_SEVERITIES:
+            upgrade_packages.add(package_name)
+
+    return findings, upgrade_packages
 
 
-def run_dependency_audits(repo_path: str) -> List[dict]:
+def run_dependency_audits(repo_path: str) -> DependencyScanResult:
     _ensure_npm()
     root = Path(repo_path)
     lockfiles = list(root.rglob("package-lock.json"))
 
+    result = DependencyScanResult(lockfiles=[lock.relative_to(root) for lock in lockfiles])
+
     if not lockfiles:
-        return [
+        result.findings.append(
             {
                 "title": "Dependency audit",
                 "severity": "info",
                 "file_path": None,
                 "summary": "No npm lockfiles found; skipped npm audit.",
             }
-        ]
+        )
+        return result
 
-    all_findings: List[dict] = []
     for lockfile in lockfiles:
         cmd = ["npm", "audit", "--json", "--package-lock-only"]
         process = subprocess.run(
@@ -94,11 +111,15 @@ def run_dependency_audits(repo_path: str) -> List[dict]:
                 f"Unable to parse npm audit output for {lockfile}"
             ) from exc
 
-        findings = _parse_vulnerabilities(data, lockfile.relative_to(root))
-        all_findings.extend(findings)
+        findings, upgrade_candidates = _parse_vulnerabilities(
+            data, lockfile.relative_to(root)
+        )
+        result.findings.extend(findings)
+        if upgrade_candidates:
+            result.upgrade_plan[lockfile.relative_to(root)] = upgrade_candidates
 
-    if not all_findings:
-        all_findings.append(
+    if not result.findings:
+        result.findings.append(
             {
                 "title": "Dependency audit",
                 "severity": "info",
@@ -107,4 +128,4 @@ def run_dependency_audits(repo_path: str) -> List[dict]:
             }
         )
 
-    return all_findings
+    return result
