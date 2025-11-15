@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .jobs import enqueue_job, get_job_status
@@ -6,6 +7,13 @@ from .schemas import AnalyzeRequest, AnalyzeResponse, RunStatusResponse
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

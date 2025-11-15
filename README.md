@@ -48,3 +48,4 @@ npm run dev
 - Generate Markdown reports via OpenAI and commit them into the target repo.
 - Automate PR creation with PyGithub using supplied PAT.
 - Build a tiny demo UI to trigger runs and preview PR links.
+- Queue LLM-powered refactors per file (in progress) so PRs include actual code improvements, not just reports.

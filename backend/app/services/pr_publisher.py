@@ -49,7 +49,7 @@ def publish_report_pr(
     repo.git.checkout(base_branch)
     repo.git.checkout("-B", head_branch)
 
-    repo.git.add(report_relative_path.as_posix())
+    repo.git.add(all=True)
     commit_message = f"Add Vulminator report ({findings_count} findings)"
     repo.index.commit(commit_message)
 

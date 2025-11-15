@@ -82,9 +82,11 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           repo_url: repoUrl,
-          github_token: githubToken || 'placeholder-token',
           preset,
-          run_ai_report: false,
+          run_ai_report: true,
+          ...(githubToken.trim()
+            ? { github_token: githubToken.trim() }
+            : {}),
         }),
       });
 
@@ -105,6 +107,36 @@ export default function App() {
   };
 
   const canSubmit = repoUrl.length > 0 && !isSubmitting;
+
+  const timelineSteps = useMemo(() => {
+    if (!message) return [];
+    return message
+      .split(';')
+      .map((step) => step.trim())
+      .filter(Boolean);
+  }, [message]);
+
+  const dependencyFindings = useMemo(
+    () => findings.filter((finding) => finding.title?.startsWith('Upgraded')),
+    [findings]
+  );
+
+  const refactorFindings = useMemo(
+    () => findings.filter((finding) => finding.title?.startsWith('Refactor')),
+    [findings]
+  );
+
+  const vulnFindings = useMemo(
+    () =>
+      findings.filter(
+        (finding) =>
+          !finding.title?.startsWith('Upgraded') &&
+          !finding.title?.startsWith('Refactor')
+      ),
+    [findings]
+  );
+
+  const isBusy = status === 'running' || status === 'queued';
 
   return (
     <main className="layout">
@@ -171,12 +203,78 @@ export default function App() {
           )}
         </header>
 
+        {isBusy && (
+          <div className="agent-animation">
+            <div className="orb" />
+            <p>Agent Vulminator is analyzing…</p>
+          </div>
+        )}
+
+        {timelineSteps.length > 0 && (
+          <div className="timeline">
+            {timelineSteps.map((step, index) => (
+              <div key={`${step}-${index}`} className="timeline-step">
+                <span className="dot" />
+                <p>{step}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {dependencyFindings.length > 0 && (
+        <section className="panel secondary">
+          <p className="eyebrow">Dependency actions</p>
+          <h2>Auto-upgraded packages</h2>
+          <div className="findings compact">
+            {dependencyFindings.map((finding, index) => (
+              <article key={`${finding.title}-${index}`} className="finding-card">
+                <div className="finding-meta">
+                  <span className="badge badge-info">INFO</span>
+                  {finding.file_path && <span className="file">{finding.file_path}</span>}
+                </div>
+                <h3>{finding.title}</h3>
+                <p>{finding.summary}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {refactorFindings.length > 0 && (
+        <section className="panel secondary">
+          <p className="eyebrow">AI refactor attempts</p>
+          <h2>Commentary drops</h2>
+          <div className="findings compact">
+            {refactorFindings.map((finding, index) => (
+              <article key={`${finding.title}-${index}`} className="finding-card">
+                <div className="finding-meta">
+                  <span
+                    className={`badge badge-${
+                      finding.severity?.toLowerCase() === 'info' ? 'info' : 'warning'
+                    }`}
+                  >
+                    {finding.severity?.toUpperCase() || 'INFO'}
+                  </span>
+                  {finding.file_path && <span className="file">{finding.file_path}</span>}
+                </div>
+                <h3>{finding.title}</h3>
+                <p>{finding.summary}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="panel">
+        <p className="eyebrow">Findings</p>
+        <h2>Vulnerabilities & warnings</h2>
         <div className="findings">
-          {findings.length === 0 && (
+          {vulnFindings.length === 0 && (
             <div className="empty-state">No findings yet — run a scan.</div>
           )}
 
-          {findings.map((finding, index) => (
+          {vulnFindings.map((finding, index) => (
             <article key={`${finding.title}-${index}`} className="finding-card">
               <div className="finding-meta">
                 <span className={`badge badge-${finding.severity?.toLowerCase()}`}>

@@ -9,6 +9,8 @@ from ..config import get_settings
 from .dependency_scan import DependencyScannerError, run_dependency_audits
 from .dependency_upgrader import DependencyUpgradeError, apply_dependency_upgrades
 from .pr_publisher import publish_report_pr
+from .refactor_queue import build_refactor_queue
+from .refactor_worker import RefactorResult, apply_refactor_tasks
 from .repo_workspace import RepoWorkspace
 from .reporting import generate_markdown_report
 from .scanners import ScannerError, run_semgrep_scan
@@ -105,6 +107,34 @@ async def run_analysis_pipeline(
             }
         )
         messages.append("Dependency audit failed")
+
+    refactor_tasks = build_refactor_queue(repo_dir, findings)
+    refactor_results: List[RefactorResult] = []
+    if refactor_tasks:
+        try:
+            refactor_results = await asyncio.to_thread(
+                apply_refactor_tasks, repo_dir, refactor_tasks
+            )
+            applied = [result for result in refactor_results if result.applied]
+            if applied:
+                messages.append(f"Applied {len(applied)} AI refactor comment(s)")
+            skipped = len(refactor_results) - len(applied)
+            if skipped:
+                messages.append(f"Skipped {skipped} refactor target(s)")
+        except Exception as exc:  # pragma: no cover
+            messages.append(f"Refactor worker failed: {exc}")
+    else:
+        messages.append("No files qualified for AI refactor queue")
+
+    for result in refactor_results:
+        findings.append(
+            {
+                "title": f"Refactor {result.task.file_path}",
+                "severity": "info" if result.applied else "warning",
+                "file_path": str(result.task.file_path),
+                "summary": result.message,
+            }
+        )
 
     finding_models = [schemas.FindingSummary(**finding) for finding in findings]
     report_relative_path = Path("reports") / "VulminatorReport.md"
