@@ -1,0 +1,11 @@
+# macOS cruft
+.DS_Store
+
+# env + build artifacts
+.env
+backend/.runs/
+backend/.venv/
+frontend/node_modules/
+reports/
+*.pyc
+__pycache__/
